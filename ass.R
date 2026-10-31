@@ -1,6 +1,5 @@
 # Get the path of the folder
-folder_path <- readline(prompt = "Enter the full folder path in your device: ")
-folder_path <- gsub('["\']', '', folder_path)
+folder_path <- "Q1"
 
 if(dir.exists(folder_path)){
   setwd(folder_path)
@@ -10,15 +9,35 @@ if(dir.exists(folder_path)){
 }
 
 clean_students_ids <- function(file_path){
-  if(!file.exist(folder_path)){
-    warning(paste("File not found:", file.path))
+  if(!file.exists(file_path)){
+    warning(paste("File not found:", file_path))
     return(character(0))
   }
   
   raw_data<-readLines(file_path, warn = FALSE)
   
-  cleaned <- trimsws(raw_data)
+  # remove leading and trailing whitespace
+  cleaned <- trimws(raw_data)
+
+  # convert all characters to uppercase
   cleaned <- toupper(cleaned)
+
+  # standardize NEMA spelling to NAME
+  cleaned <- sub("^NEMA", "NAME", cleaned)
+
+  # remove hyphens, underscores and whitespace
+  cleaned <- gsub("[-_[:space:]]", "", cleaned)
+
+  # standardize numerical portion to three digits
+  numbers <- sub("^NAME0*([0-9]+)$", "\\1", cleaned)
+  valid <- grepl("^NAME[0-9]+$", cleaned)
+
+  cleaned[valid] <- sprintf(
+    "NAME%03d",
+    as.integer(numbers[valid])
+  )
+
+  # remove empty records and duplicates
   cleaned <- cleaned[cleaned != "" & !is.na(cleaned)]
   
   unique(cleaned)
@@ -33,7 +52,7 @@ course_files <- list(
   Course6 = "Q1_CDS523.txt"
 )
 
-course_students <- lapply(course_files, clean_student_ids)
+course_students <- lapply(course_files, clean_students_ids)
 
 course_sizes <- sapply(course_students, length)
 cat("\nCourse Enrolment Counts:\n")
@@ -43,7 +62,7 @@ print(course_sizes)
 courses <-names(course_files)
 n_courses<-length(courses)
 
-conflict_matrix <- matrix(0, nrow = n_courses, ncol = n_courses, dimnames = list(course, courses))
+conflict_matrix <- matrix(0, nrow = n_courses, ncol = n_courses, dimnames = list(courses, courses))
 
 
 for(i in 1:n_courses){
