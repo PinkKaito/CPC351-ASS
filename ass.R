@@ -1,12 +1,12 @@
 
 # ==== PART A: Select the folder containing the six registration files ====
-folder_path <- "Q1"
-
-if (!dir.exists(folder_path)) {
-  stop("Q1 folder not found.")
+if (dir.exists("Q1")) {
+  setwd("Q1")
+} else if (basename(getwd()) == "Q1") {
+  # Already inside Q1, no need to setwd again
+} else {
+  stop("Q1 folder not found. Current working directory: ", getwd())
 }
-
-setwd(folder_path)
 
 cat("Working directory:", getwd(), "\n")
 
