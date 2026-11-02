@@ -169,3 +169,64 @@ cat("\nPenalty cost:", penalty, "minutes\n")
 
 cat("Routes without valid travel history:",
     blocked_routes, "\n")
+
+# ==========================================
+# QUESTION 2(b)
+# Nearest Neighbour Algorithm
+# ==========================================
+
+# PART A: Set the starting point
+
+start_point <- 1 # P1
+current_point <- start_point
+
+n_points <- nrow(cost_matrix)
+
+# Keep track of visited points
+visited <- rep(FALSE, n_points)
+visited[start_point] <- TRUE
+
+# Store the route
+route <- c(start_point)
+
+# Store the total expected travel time
+total_time <- 0
+
+# PART B: Find the nearest unvisited point
+for( step in 1:(n_points - 1)){
+  
+  # Get travel costs from the current point
+  available_costs <- cost_matrix[current_point,]
+  
+  # Prevent already visited points from being selected by using Inf (Infinity)
+  available_costs[visited] <- Inf
+  
+  # Select the unvisited point with the lowest cost
+  next_point <- which.min(available_costs)
+  
+  # Add the travel cost
+  total_time <- total_time + cost_matrix[current_point, next_point]
+  
+  # Add the selected point to the route
+  route <- c(route, next_point)
+  
+  # Mark the selected point as visited
+  visited[next_point] <- TRUE
+  
+  # Move to the selected point
+  current_point <- next_point
+}
+
+# PART C: Return to the starting point
+total_time <- total_time + cost_matrix[current_point, start_point]
+
+route <- c(route,start_point)
+
+# PART D: Display the final route and total travel time
+route_names <- point_names[route]
+
+cat("\n--- Question 2(b): Nearest Neighbour Result ---\n")
+
+cat("Final route:", paste(route_names, collapse = " -> "), "\n")
+
+cat("Total expected travel time:", total_time, "minutes\n")
