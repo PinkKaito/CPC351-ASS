@@ -35,27 +35,39 @@ print(summary(travel_data))
 
 # PART C: Filter and clean the data
 
-# Only Rainy morning records with valid travel
-# times and coordinates will be retained.
+# First keep all Rainy Morning records
+# Closure records are still kept at this stage
 
-clean_data <- travel_data[
+rainy_morning_data <- travel_data[
   !is.na(travel_data$Weather) &
   !is.na(travel_data$Time_of_Day) &
-  travel_data$Weather == "Rainy" &
-  travel_data$Time_of_Day == "Morning" &
-  !is.na(travel_data$Travel_Time_Minutes) &
-  travel_data$Travel_Time_Minutes > 0 &
+  tolower(trimws(travel_data$Weather)) == "rainy" &
+  tolower(trimws(travel_data$Time_of_Day)) == "morning" &
   !is.na(travel_data$Origin_X) &
   !is.na(travel_data$Origin_Y) &
   !is.na(travel_data$Dest_X) &
   !is.na(travel_data$Dest_Y),
 ]
 
+# Remove invalid travel times such as NA and -1.
+# Travel times must be positive.
+
+clean_data <- rainy_morning_data[
+  !is.na(rainy_morning_data$Travel_Time_Minutes) &
+  rainy_morning_data$Travel_Time_Minutes > 0,
+]
+
 cat("\n--- Cleaned Data Summary ---\n")
 print(summary(clean_data))
 
-cat("\nValid Rainy morning records:",
-    length(clean_data$Travel_Time_Minutes), "\n")
+cat("\nRainy Morning records before cleaning:", 
+    nrow(rainy_morning_data),"\n")
+
+cat("Valid Rainy Morning records:",
+    nrow(clean_data),"\n")
+
+cat("Invalid/closure records removed:",
+    nrow(rainy_morning_data) - nrow(clean_data), "\n")
 
 
 # PART D: Create the 10 x 10 cost matrix
@@ -105,10 +117,11 @@ for (i in 1:10) {
       # Calculate the third quartile (75th percentile)
       if (length(route_times) > 0) {
 
-        route_summary <- summary(route_times)
-
-        # The fifth value is the third quartile
-        cost_matrix[i, j] <- route_summary[5]
+        cost_matrix[i,j] <- quantile(
+          route_times,
+          probs = 0.75,
+          names = FALSE
+        )
       }
 
       # Routes without valid records remain NA
@@ -121,22 +134,13 @@ for (i in 1:10) {
 # PART E: Calculate severe penalty
 
 # Find the largest valid historical travel time
-largest_time <- 0
-
-if (length(clean_data$Travel_Time_Minutes) > 0) {
-
-  for (k in 1:length(clean_data$Travel_Time_Minutes)) {
-
-    if (clean_data$Travel_Time_Minutes[k] > largest_time) {
-      largest_time <- clean_data$Travel_Time_Minutes[k]
-    }
-  }
-}
-
-# Dynamic penalty larger than any normal route cost
-if (largest_time > 0) {
+if(nrow(clean_data) > 0){
+  largest_time <- max(clean_data$Travel_Time_Minutes)
+  
+  # Dynamic penalty larger than any normal route cost
   penalty <- largest_time * 10 + 1
-} else {
+}else{
+  
   # Fallback when no valid travel records exist
   penalty <- 999999
 }
