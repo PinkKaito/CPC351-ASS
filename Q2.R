@@ -29,6 +29,16 @@ point_names <- c(
 
 travel_data <- read.csv("ahmad_travel_logs.csv")
 
+required_columns <- c(
+  "Origin_X", "Origin_Y", "Dest_X", "Dest_Y",
+  "Weather", "Time_of_Day", "Travel_Time_Minutes"
+)
+missing_columns <- setdiff(required_columns, names(travel_data))
+if (length(missing_columns) > 0) {
+  stop("Missing required CSV columns: ",
+       paste(missing_columns, collapse = ", "))
+}
+
 cat("\n--- Original Data Summary ---\n")
 print(summary(travel_data))
 
@@ -49,11 +59,11 @@ rainy_morning_data <- travel_data[
   !is.na(travel_data$Dest_Y),
 ]
 
-# Remove invalid travel times such as NA and -1.
-# Travel times must be positive.
+# Remove NA, NaN, infinity, and nonpositive travel times (including -1).
+# Only finite, positive times can contribute to a route's percentile.
 
 clean_data <- rainy_morning_data[
-  !is.na(rainy_morning_data$Travel_Time_Minutes) &
+  is.finite(rainy_morning_data$Travel_Time_Minutes) &
   rainy_morning_data$Travel_Time_Minutes > 0,
 ]
 
