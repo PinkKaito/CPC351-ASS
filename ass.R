@@ -1,17 +1,15 @@
 
-# ==== PART A: Select the folder containing the six registration files ====
+# ==== PART A: Locate registration files without changing the working directory ====
 if (dir.exists("Q1")) {
-  setwd("Q1")
-} else if (basename(getwd()) == "Q1") {
-  # Already inside Q1, no need to setwd again
+  registration_dir <- "Q1"
 } else {
-  stop("Q1 folder not found. Current working directory: ", getwd())
+  stop("Run this script from the project folder containing Q1.")
 }
 
-cat("Working directory:", getwd(), "\n")
+cat("Registration folder:", registration_dir, "\n")
 
 # Display the files in the selected folder
-print(list.files())
+print(list.files(registration_dir))
 
 # Read and clean student IDs from one file
 clean_students_ids <- function(file_path) {
@@ -47,7 +45,9 @@ course_files <- list(
   Course6 = "Q1_CDS523.txt"
 )
 
-course_students <- lapply(course_files, clean_students_ids)
+course_students <- lapply(course_files, function(filename) {
+  clean_students_ids(file.path(registration_dir, filename))
+})
 course_sizes <- sapply(course_students, length)
 
 #==== PART B: Generate the 6 x 6 conflict matrix ====
