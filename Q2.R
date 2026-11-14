@@ -67,6 +67,15 @@ clean_data <- rainy_morning_data[
   rainy_morning_data$Travel_Time_Minutes > 0,
 ]
 
+unit_warning_threshold <- 300
+if (nrow(clean_data) > 0 &&
+    any(clean_data$Travel_Time_Minutes > unit_warning_threshold)) {
+  warning(
+    "Some travel times exceed ", unit_warning_threshold,
+    " minutes. Verify source units; values remain included."
+  )
+}
+
 cat("\n--- Cleaned Data Summary ---\n")
 print(summary(clean_data))
 
@@ -89,6 +98,20 @@ cost_matrix <- matrix(
   dimnames = list(point_names, point_names)
 )
 
+sample_count_matrix <- matrix(
+  0,
+  nrow = 10,
+  ncol = 10,
+  dimnames = list(point_names, point_names)
+)
+
+route_status_matrix <- matrix(
+  "Pending",
+  nrow = 10,
+  ncol = 10,
+  dimnames = list(point_names, point_names)
+)
+
 # Calculate 75th percentile for each route
 
 for (i in 1:10) {
@@ -98,6 +121,7 @@ for (i in 1:10) {
     # No travelling from a point to itself
     if (i == j) {
       cost_matrix[i, j] <- 0
+      route_status_matrix[i, j] <- "Same point"
 
     } else {
 
@@ -126,6 +150,9 @@ for (i in 1:10) {
 
       # Calculate the third quartile (75th percentile)
       if (length(route_times) > 0) {
+
+        sample_count_matrix[i, j] <- length(route_times)
+        route_status_matrix[i, j] <- "Valid"
 
         cost_matrix[i,j] <- quantile(
           route_times,
@@ -164,6 +191,7 @@ for (i in 1:10) {
     if (i != j && is.na(cost_matrix[i, j])) {
 
       cost_matrix[i, j] <- penalty
+      route_status_matrix[i, j] <- "Penalized"
       blocked_routes <- blocked_routes + 1
     }
   }
@@ -171,6 +199,14 @@ for (i in 1:10) {
 
 
 # PART F: Display final results
+
+cat("\n--- Data Reliability: Valid Sample Counts ---\n")
+print(sample_count_matrix)
+
+cat("\n--- Data Reliability: Route Status ---\n")
+print(route_status_matrix)
+
+cat("\n\n\n================================================================\n\n\n")
 
 cat("\n--- Question 2(a): Final Cost Matrix ---\n")
 print(cost_matrix)
