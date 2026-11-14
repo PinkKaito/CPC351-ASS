@@ -412,20 +412,24 @@ validate_timetable <- function(assignments, capacities, students,
 
   for (i in seq_along(students)) {
     if (length(students[[i]]) > capacities[assignments[i]]) {
-      stop("Validation FAILED: Room capacity exceeded for ", names(students)[i])
+      stop("Validation FAILED: Room capacity exceeded for ", names(students)[i],
+           " in Slot ", assignments[i])
     }
     if (i < length(students)) {
       for (j in seq.int(i + 1, length(students))) {
         pair <- paste(names(students)[i], "and", names(students)[j])
         if (assignments[i] == assignments[j]) {
-          stop("Validation FAILED: Duplicate venue-slot assignment for ", pair)
+          stop("Validation FAILED: Duplicate venue-slot assignment for ", pair,
+               " in Slot ", assignments[i])
         }
         if (length(intersect(students[[i]], students[[j]])) > 0) {
           if (get_time_block(assignments[i]) == get_time_block(assignments[j])) {
-            stop("Validation FAILED: Concurrent examinations for ", pair)
+            stop("Validation FAILED: Concurrent examinations for ", pair,
+                 " in Slots ", assignments[i], " and ", assignments[j])
           }
           if (no_back_to_back && get_day(assignments[i]) == get_day(assignments[j])) {
-            stop("Validation FAILED: Back-to-back examinations for ", pair)
+            stop("Validation FAILED: Back-to-back examinations for ", pair,
+                 " in Slots ", assignments[i], " and ", assignments[j])
           }
         }
       }
