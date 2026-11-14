@@ -27,6 +27,20 @@ run_case <- function(data) {
                                                result$route[i + 1]]
   }
   stopifnot(isTRUE(all.equal(result$total_time, leg_total)))
+  # Check every greedy decision independently, including deterministic ties.
+  unvisited <- seq_len(10)
+  for (step in 1:9) {
+    current <- result$route[step]
+    unvisited <- setdiff(unvisited, current)
+    expected <- unvisited[which.min(result$cost_matrix[current, unvisited])]
+    stopifnot(result$route[step + 1] == expected)
+  }
+  selected <- cbind(head(result$route, -1), tail(result$route, -1))
+  stopifnot(nrow(result$route_legs) == 10,
+            identical(result$route_legs$Cost,
+                      as.numeric(result$cost_matrix[selected])),
+            identical(result$route_legs$Penalized,
+                      as.logical(result$route_status_matrix[selected] == "Penalized")))
   return(result)
 }
 
@@ -92,7 +106,8 @@ cat("PASS: shuffled rows preserve matrix, route and total\n")
 
 # All costs tie: which.min selects the first unvisited point.
 stopifnot(all(baseline$route == c(1:10, 1)),
-          baseline$total_time == 325)
+          baseline$total_time == 325,
+          !any(baseline$penalized_legs))
 cat("PASS: ties choose the first unvisited point consistently\n")
 
 # Force a valid forward chain but a blocked P10 -> P1 return.
@@ -112,7 +127,9 @@ closure$Travel_Time_Minutes <- c(NA, -1)
 result <- run_case(rbind(chain, closure))
 stopifnot(all(result$route == c(1:10, 1)),
           result$cost_matrix[10, 1] == result$penalty,
-          result$total_time == 90 + result$penalty)
+          result$total_time == 90 + result$penalty,
+          sum(result$penalized_legs) == 1,
+          result$route_legs$Penalized[10])
 cat("PASS: blocked return leg is included using its penalty\n")
 
 error <- tryCatch({

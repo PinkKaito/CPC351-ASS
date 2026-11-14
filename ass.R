@@ -396,54 +396,57 @@ if (!is.null(improved_schedule)) {
 
 # ==== Final Validation ====
 
-if (!is.null(improved_schedule)) {
+# Recheck the final assignments against the cleaned registration lists,
+# independently of the conflict matrix used by the schedulers.
+validate_timetable <- function(assignments, capacities, students,
+                               no_back_to_back = FALSE) {
+  if (is.null(assignments) || length(assignments) != length(students) ||
+      !identical(names(assignments), names(students))) {
+    stop("Validation FAILED: Assign every course exactly once in course order.")
+  }
+  if (!is.numeric(assignments) || any(!is.finite(assignments)) ||
+      any(assignments != floor(assignments)) ||
+      any(assignments < 1 | assignments > length(capacities))) {
+    stop("Validation FAILED: Slots must be nonmissing integers within range.")
+  }
 
-  valid_schedule <- TRUE
-
-  for (i in seq_len(n_courses)) {
-
-    # Verify room capacity
-    if (course_sizes[i] >
-        improved_capacities[improved_schedule[i]]) {
-      valid_schedule <- FALSE
+  for (i in seq_along(students)) {
+    if (length(students[[i]]) > capacities[assignments[i]]) {
+      stop("Validation FAILED: Room capacity exceeded for ", names(students)[i])
     }
-
-    if (i < n_courses) {
-      for (j in seq.int(i + 1, n_courses)) {
-
-        # Verify no same-slot room collision
-        if (improved_schedule[i] ==
-            improved_schedule[j]) {
-          valid_schedule <- FALSE
+    if (i < length(students)) {
+      for (j in seq.int(i + 1, length(students))) {
+        pair <- paste(names(students)[i], "and", names(students)[j])
+        if (assignments[i] == assignments[j]) {
+          stop("Validation FAILED: Duplicate venue-slot assignment for ", pair)
         }
-
-        if (conflict_matrix[i, j] > 0) {
-
-          # Verify no concurrent examinations
-          if (get_time_block(improved_schedule[i]) ==
-              get_time_block(improved_schedule[j])) {
-            valid_schedule <- FALSE
+        if (length(intersect(students[[i]], students[[j]])) > 0) {
+          if (get_time_block(assignments[i]) == get_time_block(assignments[j])) {
+            stop("Validation FAILED: Concurrent examinations for ", pair)
           }
-
-          # Verify no back-to-back examinations
-          if (get_day(improved_schedule[i]) ==
-              get_day(improved_schedule[j]) &&
-              get_session(improved_schedule[i]) !=
-              get_session(improved_schedule[j])) {
-            valid_schedule <- FALSE
+          if (no_back_to_back && get_day(assignments[i]) == get_day(assignments[j])) {
+            stop("Validation FAILED: Back-to-back examinations for ", pair)
           }
         }
       }
     }
   }
+  return(TRUE)
+}
 
-  if (valid_schedule) {
-    cat("\nValidation PASSED:\n")
-    cat("- No concurrent examinations\n")
-    cat("- No back-to-back examinations\n")
-    cat("- No venue capacity violations\n")
-    cat("- No duplicate venue-slot assignments\n")
-  } else {
-    stop("Validation FAILED: Timetable violates constraints.")
-  }
+if (!is.null(extended_schedule)) {
+  basic_capacities <- if (is.null(basic_schedule)) extended_capacities else slot_capacities
+  validate_timetable(extended_schedule, basic_capacities, course_students)
+  cat("\nPart C validation PASSED: Every course assigned; room and conflict checks passed.\n")
+}
+
+if (!is.null(improved_schedule)) {
+  validate_timetable(improved_schedule, improved_capacities,
+                     course_students, no_back_to_back = TRUE)
+  cat("\nPart D validation PASSED:\n")
+  cat("- Every course assigned to a valid slot\n")
+  cat("- No concurrent examinations\n")
+  cat("- No back-to-back examinations\n")
+  cat("- No venue capacity violations\n")
+  cat("- No duplicate venue-slot assignments\n")
 }

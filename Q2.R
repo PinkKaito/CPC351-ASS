@@ -224,9 +224,20 @@ cat("Routes without valid travel history:",
 # PART A: Set the starting point
 
 start_point <- 1 # P1
-current_point <- start_point
 
 n_points <- nrow(cost_matrix)
+
+# Check the matrix before selecting destinations. Finite penalties remain
+# eligible so a tour can still be produced when usable connections run out.
+if (n_points != ncol(cost_matrix) || n_points < 2 ||
+    any(!is.finite(cost_matrix)) || any(cost_matrix < 0)) {
+  stop("Routing requires a square matrix of finite, nonnegative costs.")
+}
+if (length(start_point) != 1 || !is.finite(start_point) ||
+    start_point != floor(start_point) || start_point < 1 || start_point > n_points) {
+  stop("Starting point must be an integer within the cost matrix.")
+}
+current_point <- start_point
 
 # Keep track of visited points
 visited <- rep(FALSE, n_points)
@@ -268,6 +279,26 @@ total_time <- total_time + cost_matrix[current_point, start_point]
 
 route <- c(route,start_point)
 
+# Verify the closed tour and independently sum every leg, including the return.
+if (length(route) != n_points + 1 || route[1] != start_point ||
+    tail(route, 1) != start_point ||
+    !identical(sort(as.integer(route[seq_len(n_points)])), seq_len(n_points))) {
+  stop("Route validation FAILED: Visit each point once and return to the start.")
+}
+leg_indices <- cbind(head(route, -1), tail(route, -1))
+leg_costs <- cost_matrix[leg_indices]
+if (!isTRUE(all.equal(total_time, sum(leg_costs)))) {
+  stop("Route validation FAILED: Total does not match the selected legs.")
+}
+
+penalized_legs <- route_status_matrix[leg_indices] == "Penalized"
+route_legs <- data.frame(
+  From = point_names[head(route, -1)],
+  To = point_names[tail(route, -1)],
+  Cost = as.numeric(leg_costs),
+  Penalized = as.logical(penalized_legs)
+)
+
 # PART D: Display the final route and total travel time
 route_names <- point_names[route]
 
@@ -275,4 +306,13 @@ cat("\n--- Question 2(b): Nearest Neighbour Result ---\n")
 
 cat("Final route:", paste(route_names, collapse = " -> "), "\n")
 
-cat("Total expected travel time:", total_time, "minutes\n")
+cat("\n--- Selected Route Legs (including return) ---\n")
+print(route_legs, row.names = FALSE)
+cat("\nRoute validation PASSED: Each point visited once; return and total checked.\n")
+cat("Penalized legs used:", sum(penalized_legs), "\n")
+if (any(penalized_legs)) {
+  cat("Total routing cost (including artificial penalties):", total_time, "\n")
+  cat("This tour uses connections without valid history; the total is not a realistic travel-time estimate.\n")
+} else {
+  cat("Total expected travel time:", total_time, "minutes\n")
+}
