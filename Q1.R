@@ -425,15 +425,56 @@ if (!is.null(improved_schedule)) {
 # independently of the conflict matrix used by the schedulers.
 validate_timetable <- function(assignments, capacities, students,
                                no_back_to_back = FALSE) {
-  if (is.null(assignments) || length(assignments) != length(students) ||
+  
+  # Check 1: Every course must be assigned exactly once
+  for (course in names(students)) {
+    
+    # Find all slots assigned to this course
+    found <- which(names(assignments) == course)
+    
+    if (length(found) != 1) {
+      
+      if (length(found) == 0) {
+        slots <- "none"
+      } else {
+        slots <- paste(assignments[found], collapse = ", ")
+      }
+      
+      stop("Validation FAILED: Assign every course exactly once. ",
+           course, " appears ", length(found),
+           " time(s). Slot(s): ", slots)
+    }
+  }
+  
+  # Check that the course names and order are correct
+  if (length(assignments) != length(students) ||
       !identical(names(assignments), names(students))) {
-    stop("Validation FAILED: Assign every course exactly once in course order.")
+    
+    stop("Validation FAILED: Assign every course exactly once in course order. ",
+         "Expected: ", paste(names(students), collapse = ", "),
+         "; received: ", paste(names(assignments), collapse = ", "))
   }
-  if (!is.numeric(assignments) || any(!is.finite(assignments)) ||
-      any(assignments != floor(assignments)) ||
-      any(assignments < 1 | assignments > length(capacities))) {
-    stop("Validation FAILED: Slots must be nonmissing integers within range.")
+  
+  # Check 2: Every slot must be a valid number
+  if (!is.numeric(assignments)) {
+    stop("Validation FAILED: Slots must be numeric. Received: ",
+         paste(names(assignments), assignments, collapse = "; "))
   }
+  
+  for (i in seq_along(assignments)) {
+    
+    slot <- assignments[i]
+    
+    if (is.na(slot) || !is.finite(slot) ||
+        slot != floor(slot) ||
+        slot < 1 || slot > length(capacities)) {
+      
+      stop("Validation FAILED: Slots must be nonmissing integers within range. ",
+           names(assignments)[i], " has Slot ", slot,
+           " (allowed: 1 to ", length(capacities), ").")
+    }
+  }
+  
 
   for (i in seq_along(students)) {
     if (length(students[[i]]) > capacities[assignments[i]]) {

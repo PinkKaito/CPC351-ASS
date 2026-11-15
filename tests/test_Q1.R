@@ -1,6 +1,6 @@
 # Run from the project root: Rscript tests/test_Q1.R
 original_folder <- getwd()
-invisible(capture.output(source("ass.R")))
+invisible(capture.output(source("Q1.R")))
 stopifnot(identical(getwd(), original_folder),
           identical(as.integer(extended_schedule), c(1L, 2L, 3L, 6L, 8L, 9L)),
           identical(as.integer(improved_schedule), c(1L, 2L, 5L, 10L, 14L, 17L)))

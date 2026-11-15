@@ -14,7 +14,26 @@ run_case <- function(data) {
   write.csv(data, "ahmad_travel_logs.csv", row.names = FALSE)
   result <- new.env(parent = globalenv())
   # Keep successful test output concise; errors still propagate.
-  invisible(capture.output(sys.source(q2_script, envir = result)))
+  
+  # Store any warnings produced by Q2.R
+  result$warning_messages <- character(0)
+  
+  # Run Q2.R and capture its warnings
+  invisible(capture.output(
+    withCallingHandlers(
+      sys.source(q2_script, envir = result),
+      
+      warning = function(w) {
+        result$warning_messages <- c(
+          result$warning_messages,
+          conditionMessage(w)
+        )
+        
+        invokeRestart("muffleWarning")
+      }
+    )
+  ))
+  
   stopifnot(all(dim(result$cost_matrix) == c(10, 10)),
             all(is.finite(result$cost_matrix)),
             all(diag(result$cost_matrix) == 0),
@@ -83,6 +102,15 @@ for (condition in c("no matching conditions", "empty CSV", "all closures")) {
   result <- run_case(data)
   stopifnot(nrow(result$clean_data) == 0, result$blocked_routes == 90,
             result$penalty == 999999, result$total_time == 10 * 999999)
+  
+  
+  # A tour using penalties must display a warning
+  stopifnot(
+    any(grepl("Artificial routing cost",
+              result$warning_messages,
+              fixed = TRUE))
+  )
+  
   cat("PASS:", condition, "\n")
 }
 
@@ -130,6 +158,22 @@ stopifnot(all(result$route == c(1:10, 1)),
           result$total_time == 90 + result$penalty,
           sum(result$penalized_legs) == 1,
           result$route_legs$Penalized[10])
+
+
+# Check that a penalty warning was produced
+stopifnot(
+  any(grepl("Artificial routing cost",
+            result$warning_messages,
+            fixed = TRUE))
+)
+
+# Check that the warning identifies the return journey
+stopifnot(
+  any(grepl("P10 -> P1",
+            result$warning_messages,
+            fixed = TRUE))
+)
+
 cat("PASS: blocked return leg is included using its penalty\n")
 
 error <- tryCatch({

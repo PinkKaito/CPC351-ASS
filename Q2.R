@@ -226,63 +226,84 @@ cat("Routes without valid travel history:",
 # Nearest Neighbour Algorithm
 # ==========================================
 
-# PART A: Set the starting point
 
-start_point <- 1 # P1
+# PART A: Create a reusable Nearest Neighbour function
 
+nearest_neighbour <- function(cost_matrix, start_point = 1) {
+  
+  # Get the number of delivery points
+  n_points <- nrow(cost_matrix)
+  
+  # Check that the cost matrix is valid
+  if (n_points != ncol(cost_matrix) || n_points < 2 ||
+      any(!is.finite(cost_matrix)) || any(cost_matrix < 0)) {
+    stop("Routing requires a square matrix of finite, nonnegative costs.")
+  }
+  
+  # Check that the starting point is valid
+  if (length(start_point) != 1 || !is.numeric(start_point) ||
+      !is.finite(start_point) ||
+      start_point != floor(start_point) ||
+      start_point < 1 || start_point > n_points) {
+    stop("Starting point must be an integer within the cost matrix.")
+  }
+  
+  # Start from the chosen point
+  current_point <- start_point
+  
+  # Keep track of visited points
+  visited <- rep(FALSE, n_points)
+  visited[start_point] <- TRUE
+  
+  # Store the route and total travel time
+  route <- c(start_point)
+  total_time <- 0
+  
+  # Find the nearest unvisited point
+  for (step in 1:(n_points - 1)) {
+    
+    # Get travel costs from the current point
+    available_costs <- cost_matrix[current_point, ]
+    
+    # Prevent visiting the same point again
+    available_costs[visited] <- Inf
+    
+    # Choose the nearest unvisited point
+    next_point <- which.min(available_costs)
+    
+    # Add the travel cost
+    total_time <- total_time + cost_matrix[current_point, next_point]
+    
+    # Update the route
+    route <- c(route, next_point)
+    
+    # Mark the point as visited
+    visited[next_point] <- TRUE
+    
+    # Move to the next point
+    current_point <- next_point
+  }
+  
+  # Return to the starting point
+  total_time <- total_time + cost_matrix[current_point, start_point]
+  route <- c(route, start_point)
+  
+  # Return both results
+  return(list(route = route, total_time = total_time))
+}
+
+
+# PART B: Run the Nearest Neighbour function
+
+start_point <- 1
+
+nn_result <- nearest_neighbour(cost_matrix, start_point)
+
+# Save the results for validation and display
+route <- nn_result$route
+total_time <- nn_result$total_time
 n_points <- nrow(cost_matrix)
 
-# Check the matrix before selecting destinations. Finite penalties remain
-# eligible so a tour can still be produced when usable connections run out.
-if (n_points != ncol(cost_matrix) || n_points < 2 ||
-    any(!is.finite(cost_matrix)) || any(cost_matrix < 0)) {
-  stop("Routing requires a square matrix of finite, nonnegative costs.")
-}
-if (length(start_point) != 1 || !is.finite(start_point) ||
-    start_point != floor(start_point) || start_point < 1 || start_point > n_points) {
-  stop("Starting point must be an integer within the cost matrix.")
-}
-current_point <- start_point
-
-# Keep track of visited points
-visited <- rep(FALSE, n_points)
-visited[start_point] <- TRUE
-
-# Store the route
-route <- c(start_point)
-
-# Store the total expected travel time
-total_time <- 0
-
-# PART B: Find the nearest unvisited point
-for( step in 1:(n_points - 1)){
-  
-  # Get travel costs from the current point
-  available_costs <- cost_matrix[current_point,]
-  
-  # Prevent already visited points from being selected by using Inf (Infinity)
-  available_costs[visited] <- Inf
-  
-  # Select the unvisited point with the lowest cost
-  next_point <- which.min(available_costs)
-  
-  # Add the travel cost
-  total_time <- total_time + cost_matrix[current_point, next_point]
-  
-  # Add the selected point to the route
-  route <- c(route, next_point)
-  
-  # Mark the selected point as visited
-  visited[next_point] <- TRUE
-  
-  # Move to the selected point
-  current_point <- next_point
-}
-
-# PART C: Return to the starting point
-total_time <- total_time + cost_matrix[current_point, start_point]
-
-route <- c(route,start_point)
 
 # Verify the closed tour and independently sum every leg, including the return.
 if (length(route) != n_points + 1 || route[1] != start_point ||
@@ -315,12 +336,35 @@ cat("\n--- Selected Route Legs (including return) ---\n")
 print(route_legs, row.names = FALSE)
 cat("\nRoute validation PASSED: Each point visited once; return and total checked.\n")
 cat("Penalized legs used:", sum(penalized_legs), "\n")
+
 if (any(penalized_legs)) {
-  cat("Total routing cost (including artificial penalties):", total_time, "\n")
-  cat("This tour uses connections without valid history; the total is not a realistic travel-time estimate.\n")
+  
+  # Identify which routes are penalized
+  penalized_routes <- paste(
+    route_legs$From[penalized_legs],
+    "->",
+    route_legs$To[penalized_legs],
+    collapse = ", "
+  )
+  
+  # Display the artificial total
+  cat("Total routing cost (including artificial penalties):",
+      total_time, "minutes\n")
+  
+  # Display a warning showing the penalized routes
+  warning(
+    "Artificial routing cost! Penalized leg(s): ",
+    penalized_routes,
+    ". Total is not a realistic travel-time estimate.",
+    call. = FALSE
+  )
+  
 } else {
+  
+  # No penalties used
   cat("Total expected travel time:", total_time, "minutes\n")
 }
+
 
 # Plot a graph displaying tour map
 plot(
