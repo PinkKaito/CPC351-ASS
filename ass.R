@@ -1,41 +1,48 @@
-
-# ==== PART A: Locate registration files without changing the working directory ====
+# ==== PART A: Data Cleaning and Preprocessing ====
 if (dir.exists("Q1")) {
   registration_dir <- "Q1"
+} else if (file.exists("Q1_CCS592.txt")) {
+  registration_dir <- "."
 } else {
-  stop("Run this script from the project folder containing Q1.")
+  stop("Cannot find Q1 folder or registration text files in: ", getwd())
 }
 
 cat("Registration folder:", registration_dir, "\n")
-
-# Display the files in the selected folder
 print(list.files(registration_dir))
 
-# Read and clean student IDs from one file
+# Read and clean student IDs from one file, returning both audit stats and cleaned IDs
 clean_students_ids <- function(file_path) {
   if (!file.exists(file_path)) {
     stop(paste("File not found:", file_path))
   }
   
   raw_data <- readLines(file_path, warn = FALSE)
+  non_empty_raw <- trimws(raw_data)
+  non_empty_raw <- non_empty_raw[!is.na(non_empty_raw) & non_empty_raw != ""]
   
   # Standardize how each student ID is written
-  cleaned <- trimws(raw_data)
-  cleaned <- toupper(cleaned)
+  cleaned <- toupper(non_empty_raw)
   cleaned <- gsub("[ _-]", "", cleaned)
   
-  # Treat NEMA as a typo for NAME (assumption for this dataset)
+  # Treat NEMA as a typo for NAME
+  nema_fixed <- sum(grepl("^NEMA", cleaned))
   cleaned <- sub("^NEMA", "NAME", cleaned)
   
   # Example: NAME003 and NAME03 both become NAME3
   cleaned <- sub("^NAME0+", "NAME", cleaned)
   
-  # Remove missing IDs, blank lines and duplicate registrations
-  cleaned <- cleaned[!is.na(cleaned) & cleaned != ""]
-  return(unique(cleaned))
+  unique_ids <- unique(cleaned)
+  
+  list(
+    ids = unique_ids,
+    raw_lines = length(raw_data),
+    blank_removed = length(raw_data) - length(non_empty_raw),
+    nema_fixed = nema_fixed,
+    duplicates_removed = length(cleaned) - length(unique_ids),
+    cleaned_count = length(unique_ids)
+  )
 }
 
-# Keep the original course names to minimize changes to teammate's code
 course_files <- list(
   Course1 = "Q1_CCS592.txt",
   Course2 = "Q1_CDS501.txt",
@@ -45,9 +52,29 @@ course_files <- list(
   Course6 = "Q1_CDS523.txt"
 )
 
-course_students <- lapply(course_files, function(filename) {
+# Run cleaning for all courses
+clean_results <- lapply(course_files, function(filename) {
   clean_students_ids(file.path(registration_dir, filename))
 })
+
+# Build and display the cleaning audit table
+# Build and display the cleaning audit table
+cleaning_audit <- data.frame(
+  Course = names(clean_results),
+  File = unlist(course_files),
+  Raw = sapply(clean_results, `[[`, "raw_lines"),
+  Blanks = sapply(clean_results, `[[`, "blank_removed"),
+  NEMA = sapply(clean_results, `[[`, "nema_fixed"),
+  Dupes = sapply(clean_results, `[[`, "duplicates_removed"),
+  Cleaned = sapply(clean_results, `[[`, "cleaned_count"),
+  row.names = NULL
+)
+
+cat("\n--- Data Cleaning Audit Summary ---\n")
+print(cleaning_audit, row.names = FALSE)
+
+# Keep exact variable names expected by Part B, C, and D
+course_students <- lapply(clean_results, `[[`, "ids")
 course_sizes <- sapply(course_students, length)
 
 #==== PART B: Generate the 6 x 6 conflict matrix ====
@@ -78,7 +105,6 @@ print(course_sizes)
 
 cat("\n--- 6x6 Conflict Matrix ---\n")
 print(conflict_matrix)
-
 
 #==== PART C: Timetable Generation ====
 
