@@ -39,6 +39,11 @@ if (length(missing_columns) > 0) {
        paste(missing_columns, collapse = ", "))
 }
 
+# To convert the text anomaly in csv to NA
+travel_data$Travel_Time_Minutes <- suppressWarnings(
+  as.numeric(trimws(as.character(travel_data$Travel_Time_Minutes)))
+)
+
 cat("\n--- Original Data Summary ---\n")
 print(summary(travel_data))
 
