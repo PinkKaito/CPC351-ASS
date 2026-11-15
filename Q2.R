@@ -316,3 +316,39 @@ if (any(penalized_legs)) {
 } else {
   cat("Total expected travel time:", total_time, "minutes\n")
 }
+
+# Plot a graph displaying tour map
+plot(
+  points[, 1], points[, 2],
+  xlim = c(0, 220), ylim = c(105, 215),
+  pch = 19, cex = 1.6, col = "steelblue",
+  xlab = "X Coordinate", ylab = "Y Coordinate",
+  main = paste0("Q2 Nearest Neighbour Tour (Total: ", round(total_time, 2), " mins)")
+)
+grid()
+
+# Draw directed arrows for each leg in the tour
+for (k in 1:(length(route) - 1)) {
+  from <- route[k]
+  to <- route[k + 1]
+  arrows(
+    points[from, 1], points[from, 2],
+    points[to, 1], points[to, 2],
+    length = 0.12, lwd = 1.8,
+    col = ifelse(k == length(route) - 1, "darkgreen", "darkorange")
+  )
+  mid_x <- (points[from, 1] + points[to, 1]) / 2
+  mid_y <- (points[from, 2] + points[to, 2]) / 2
+  text(mid_x, mid_y, labels = round(cost_matrix[from, to], 1), cex = 0.75, col = "darkred")
+}
+
+# Highlight P1 start/end and label all points
+points(points[start_point, 1], points[start_point, 2], pch = 19, cex = 2.0, col = "darkgreen")
+text(points[, 1], points[, 2] + 5, labels = point_names, font = 2)
+legend(
+  "bottomright",
+  legend = c("Start / End (P1)", "Delivery Leg (75th %ile mins)", "Return Leg to P1"),
+  pch = c(19, NA, NA), lty = c(NA, 1, 1), lwd = 2,
+  col = c("darkgreen", "darkorange", "darkgreen"),
+  bty = "n", cex = 0.8
+)
