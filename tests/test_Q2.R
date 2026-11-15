@@ -59,7 +59,7 @@ run_case <- function(data) {
             identical(result$route_legs$Cost,
                       as.numeric(result$cost_matrix[selected])),
             identical(result$route_legs$Penalized,
-                      as.logical(result$route_status_matrix[selected] == "Penalized")))
+                      as.logical(result$penalty_matrix[selected])))
   return(result)
 }
 
@@ -182,4 +182,57 @@ error <- tryCatch({
 }, error = function(e) conditionMessage(e))
 stopifnot(identical(error, "Missing required CSV columns: Dest_X, Weather"))
 cat("PASS: missing required columns produce a clear error\n")
+# Unknown and same-point journeys must not inflate the penalty.
+bad_points <- history[rep(1, 3), ]
+bad_points$Travel_Time_Minutes <- 1e100
+bad_points$Origin_X[1] <- 999
+bad_points$Dest_Y[2] <- NA
+bad_points$Dest_X[3] <- bad_points$Origin_X[3]
+bad_points$Dest_Y[3] <- bad_points$Origin_Y[3]
+result <- run_case(rbind(history, bad_points))
+stopifnot(identical(result$cost_matrix, baseline$cost_matrix),
+          result$penalty == baseline$penalty,
+          sum(result$cleaning_audit$Records) == nrow(history) + 3,
+          sum(result$cleaning_reason == "Invalid coordinates") == 2,
+          sum(result$cleaning_reason == "Same-point journey") == 1)
+cat("PASS: unknown and same-point coordinates cannot inflate penalties\n")
+
+# Character values preserve NaN separately from missing and malformed records.
+anomalies <- history[rep(1, 9), ]
+anomalies$Travel_Time_Minutes <- c(NA, "", "NaN", "Inf", "oops", "-1", "0", "-2", "20")
+result <- run_case(rbind(history, anomalies))
+expected <- c("Missing time", "Missing time", "Non-finite time", "Non-finite time",
+              "Malformed time", "Closure (-1)", "Zero time", "Other negative time", "Valid")
+stopifnot(identical(tail(result$cleaning_reason, 9), expected),
+          result$cost_matrix[1, 2] == 30,
+          result$route_status_matrix[1, 2] == "Valid")
+cat("PASS: audit categories reconcile; mixed valid and invalid history uses valid times\n")
+
+closure_only <- missing_route[1:2, ]
+closure_only$Origin_X <- x[1]; closure_only$Origin_Y <- y[1]
+closure_only$Dest_X <- x[2]; closure_only$Dest_Y <- y[2]
+closure_only$Travel_Time_Minutes <- c(NA, -1)
+result <- run_case(rbind(missing_route, closure_only))
+stopifnot(result$route_status_matrix[1, 2] == "Closure-only history")
+closure_only$Travel_Time_Minutes <- c(0, -2)
+result <- run_case(rbind(missing_route, closure_only))
+stopifnot(result$route_status_matrix[1, 2] == "Other invalid history", result$penalty_matrix[1, 2])
+result <- run_case(missing_route)
+stopifnot(result$route_status_matrix[1, 2] == "No observations")
+cat("PASS: unavailable routes distinguish absent, closure-only and invalid history\n")
+
+for (kind in c("diagonal", "labels", "penalty", "history")) {
+  costs <- baseline$cost_matrix; counts <- baseline$sample_count_matrix
+  penalties <- baseline$penalty_matrix
+  if (kind == "diagonal") costs[1, 1] <- 1
+  if (kind == "labels") rownames(costs)[1] <- "wrong"
+  if (kind == "penalty") penalties[1, 2] <- TRUE
+  if (kind == "history") counts[1, 2] <- 0
+  failed <- tryCatch({
+    baseline$validate_cost_matrix(costs, counts, penalties, baseline$penalty, baseline$point_names)
+    FALSE
+  }, error = function(e) TRUE)
+  stopifnot(failed)
+}
+cat("PASS: matrix validator rejects corrupted structure and penalty evidence\n")
 cat("All Question 2 checks passed.\n")

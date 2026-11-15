@@ -39,38 +39,55 @@ if (length(missing_columns) > 0) {
        paste(missing_columns, collapse = ", "))
 }
 
-# To convert the text anomaly in csv to NA
-travel_data$Travel_Time_Minutes <- suppressWarnings(
-  as.numeric(trimws(as.character(travel_data$Travel_Time_Minutes)))
-)
+# Preserve raw values so the audit can distinguish missing and malformed times.
+raw_times <- trimws(as.character(travel_data$Travel_Time_Minutes))
+travel_data$Travel_Time_Minutes <- suppressWarnings(as.numeric(raw_times))
 
 cat("\n--- Original Data Summary ---\n")
 print(summary(travel_data))
 
-
-# PART C: Filter and clean the data
-
-# First keep all Rainy Morning records
-# Closure records are still kept at this stage
-
-rainy_morning_data <- travel_data[
-  !is.na(travel_data$Weather) &
-  !is.na(travel_data$Time_of_Day) &
+# PART C: Filter conditions, validate delivery points, and classify each row.
+target <- !is.na(travel_data$Weather) & !is.na(travel_data$Time_of_Day) &
   tolower(trimws(travel_data$Weather)) == "rainy" &
-  tolower(trimws(travel_data$Time_of_Day)) == "morning" &
-  !is.na(travel_data$Origin_X) &
-  !is.na(travel_data$Origin_Y) &
-  !is.na(travel_data$Dest_X) &
-  !is.na(travel_data$Dest_Y),
-]
+  tolower(trimws(travel_data$Time_of_Day)) == "morning"
+rainy_morning_data <- travel_data[target, , drop = FALSE]
+raw_target_times <- raw_times[target]
+point_keys <- paste(points[, 1], points[, 2], sep = ",")
+origin_id <- match(paste(rainy_morning_data$Origin_X,
+                         rainy_morning_data$Origin_Y, sep = ","), point_keys)
+dest_id <- match(paste(rainy_morning_data$Dest_X,
+                       rainy_morning_data$Dest_Y, sep = ","), point_keys)
+valid_coordinates <- !is.na(origin_id) & !is.na(dest_id)
+self_journey <- valid_coordinates & origin_id == dest_id
+self_journey[is.na(self_journey)] <- FALSE
 
-# Remove NA, NaN, infinity, and nonpositive travel times (including -1).
-# Only finite, positive times can contribute to a route's percentile.
-
-clean_data <- rainy_morning_data[
-  is.finite(rainy_morning_data$Travel_Time_Minutes) &
-  rainy_morning_data$Travel_Time_Minutes > 0,
-]
+# Each target-condition record receives exactly one reason, in this priority order.
+times <- rainy_morning_data$Travel_Time_Minutes
+cleaning_reason <- rep("Valid", nrow(rainy_morning_data))
+classify <- function(mask, label) {
+  mask[is.na(mask)] <- FALSE
+  cleaning_reason[mask & cleaning_reason == "Valid"] <<- label
+}
+classify(!valid_coordinates, "Invalid coordinates")
+classify(self_journey, "Same-point journey")
+classify(is.na(raw_target_times) | raw_target_times %in% c("", "NA"), "Missing time")
+classify(is.nan(times) | is.infinite(times), "Non-finite time")
+classify(is.na(times), "Malformed time")
+classify(times == -1, "Closure (-1)")
+classify(times == 0, "Zero time")
+classify(times < 0, "Other negative time")
+cleaning_categories <- c("Invalid coordinates", "Same-point journey", "Missing time",
+                         "Non-finite time", "Malformed time", "Closure (-1)",
+                         "Zero time", "Other negative time", "Valid")
+cleaning_audit <- data.frame(
+  Reason = cleaning_categories,
+  Records = as.integer(table(factor(cleaning_reason, levels = cleaning_categories)))
+)
+stopifnot(sum(cleaning_audit$Records) == nrow(rainy_morning_data))
+clean_data <- rainy_morning_data[cleaning_reason == "Valid", , drop = FALSE]
+cat("\n--- Rainy Morning Cleaning Audit (one reason per record) ---\n")
+print(cleaning_audit, row.names = FALSE)
+cat("Records outside Rainy Morning conditions:", sum(!target), "\n")
 
 unit_warning_threshold <- 300
 if (nrow(clean_data) > 0 &&
@@ -166,8 +183,19 @@ for (i in 1:10) {
         )
       }
 
-      # Routes without valid records remain NA
-      # until penalty calculation.
+      # Preserve the reason for unavailable history separately from the penalty flag.
+      if (length(route_times) == 0) {
+        pair_rows <- which(valid_coordinates & !self_journey &
+                           origin_id == i & dest_id == j)
+        if (length(pair_rows) == 0) {
+          route_status_matrix[i, j] <- "No observations"
+        } else if (all(cleaning_reason[pair_rows] %in%
+                       c("Missing time", "Closure (-1)"))) {
+          route_status_matrix[i, j] <- "Closure-only history"
+        } else {
+          route_status_matrix[i, j] <- "Other invalid history"
+        }
+      }
     }
   }
 }
@@ -187,6 +215,12 @@ if(nrow(clean_data) > 0){
   penalty <- 999999
 }
 
+if (!is.finite(penalty) || penalty <= 0) {
+  stop("Penalty calculation overflowed; travel times are too large.")
+}
+penalty_matrix <- is.na(cost_matrix)
+diag(penalty_matrix) <- FALSE
+
 # Replace missing route costs with penalty
 blocked_routes <- 0
 
@@ -196,12 +230,34 @@ for (i in 1:10) {
     if (i != j && is.na(cost_matrix[i, j])) {
 
       cost_matrix[i, j] <- penalty
-      route_status_matrix[i, j] <- "Penalized"
       blocked_routes <- blocked_routes + 1
     }
   }
 }
 
+
+# Independently verify the completed matrix and the history supporting each entry.
+validate_cost_matrix <- function(costs, counts, penalties, penalty_value, labels) {
+  expected_names <- list(labels, labels)
+  off_diagonal <- row(costs) != col(costs)
+  if (!identical(dim(costs), c(length(labels), length(labels))) ||
+      !identical(dimnames(costs), expected_names) ||
+      !identical(dim(counts), dim(costs)) ||
+      !identical(dim(penalties), dim(costs)) ||
+      any(!is.finite(costs)) || any(diag(costs) != 0) ||
+      any(costs[off_diagonal] <= 0) ||
+      any(diag(counts) != 0) || any(counts < 0) ||
+      any(diag(penalties)) ||
+      any(penalties[off_diagonal] != (counts[off_diagonal] == 0)) ||
+      !is.finite(penalty_value) || penalty_value <= 0 ||
+      any(costs[penalties] != penalty_value) ||
+      any(costs[off_diagonal & !penalties] >= penalty_value)) {
+    stop("Cost matrix validation FAILED: Check labels, costs, counts and penalties.")
+  }
+  TRUE
+}
+validate_cost_matrix(cost_matrix, sample_count_matrix, penalty_matrix, penalty, point_names)
+cat("\nCost matrix validation PASSED: Structure, history and penalties checked.\n")
 
 # PART F: Display final results
 
@@ -317,7 +373,7 @@ if (!isTRUE(all.equal(total_time, sum(leg_costs)))) {
   stop("Route validation FAILED: Total does not match the selected legs.")
 }
 
-penalized_legs <- route_status_matrix[leg_indices] == "Penalized"
+penalized_legs <- penalty_matrix[leg_indices]
 route_legs <- data.frame(
   From = point_names[head(route, -1)],
   To = point_names[tail(route, -1)],
