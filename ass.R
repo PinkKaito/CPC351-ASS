@@ -58,7 +58,6 @@ clean_results <- lapply(course_files, function(filename) {
 })
 
 # Build and display the cleaning audit table
-# Build and display the cleaning audit table
 cleaning_audit <- data.frame(
   Course = names(clean_results),
   File = unlist(course_files),
